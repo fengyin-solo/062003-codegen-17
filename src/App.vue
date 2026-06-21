@@ -27,6 +27,9 @@
     @debut="onDebut"
     @resolve-poaching="handlePoaching"
     @release-single="onReleaseSingle"
+    @publish-material="onPublishMaterial"
+    @respond-topic="onRespondTopic"
+    @trigger-conversion="onTriggerConversion"
   />
 </template>
 
@@ -96,5 +99,20 @@ function onReleaseSingle(groupId) {
   if (result && !result.success) {
     alert(result.message)
   }
+}
+
+function onPublishMaterial(type, callback) {
+  const result = handlePublishMaterial(type)
+  if (callback) callback(result)
+}
+
+function onRespondTopic(topicId, optionIndex, callback) {
+  const result = handleRespondToTopic(topicId, optionIndex)
+  if (callback) callback(result)
+}
+
+function onTriggerConversion(type, callback) {
+  const result = handleTriggerConversion(type)
+  if (callback) callback(result)
 }
 </script>

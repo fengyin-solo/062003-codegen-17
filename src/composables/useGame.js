@@ -10,6 +10,9 @@ import {
   calcProfit,
   calcTraineeScore,
   getRelationship,
+  publishMaterial,
+  respondToTopic,
+  triggerConversion,
 } from '../utils/gameLogic'
 import { saveToSlot } from '../utils/storage'
 
@@ -112,6 +115,36 @@ export function useGame() {
     return getRelationship(state.value.relationships, idA, idB)
   }
 
+  function handlePublishMaterial(materialType, targetTraineeId = null) {
+    if (!state.value) return { success: false, message: '游戏未开始' }
+    const result = publishMaterial(state.value, materialType, targetTraineeId)
+    if (result.success) {
+      state.value = result.state
+      autoSave()
+    }
+    return result
+  }
+
+  function handleRespondToTopic(topicId, optionIndex) {
+    if (!state.value) return { success: false, message: '游戏未开始' }
+    const result = respondToTopic(state.value, topicId, optionIndex)
+    if (result.success) {
+      state.value = result.state
+      autoSave()
+    }
+    return result
+  }
+
+  function handleTriggerConversion(conversionType) {
+    if (!state.value) return { success: false, message: '游戏未开始' }
+    const result = triggerConversion(state.value, conversionType)
+    if (result.success) {
+      state.value = result.state
+      autoSave()
+    }
+    return result
+  }
+
   return {
     state,
     currentSlot,
@@ -134,5 +167,8 @@ export function useGame() {
     getRatingResults: () => (state.value ? getRatingResults(state.value) : []),
     calcTraineeScore,
     autoSave,
+    handlePublishMaterial,
+    handleRespondToTopic,
+    handleTriggerConversion,
   }
 }

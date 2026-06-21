@@ -24,6 +24,22 @@ export function createInitialGameState() {
     pendingRating: false,
     gameStatus: 'playing',
     lastSingleDay: {},
+    community: createInitialCommunityState(),
+  }
+}
+
+function createInitialCommunityState() {
+  return {
+    activity: CFG.community.initialActivity,
+    satisfaction: CFG.community.initialSatisfaction,
+    materials: [],
+    topics: [],
+    conversions: [],
+    lastMaterialDay: {},
+    lastConversionDay: {},
+    pendingTopic: null,
+    totalConversionRevenue: 0,
+    revenueBonusMultiplier: 1,
   }
 }
 
@@ -265,6 +281,8 @@ export function processDay(state) {
   money -= dailyCost
   totalExpenses += dailyCost
 
+  const community = processCommunityDaily(state, logs)
+
   const newDay = state.day + 1
   const pendingRating = state.day % CFG.rating.interval === 0
 
@@ -323,6 +341,7 @@ export function processDay(state) {
     logs: [...state.logs, ...logs],
     pendingEvent,
     pendingRating,
+    community,
   }
 
   const result = checkVictory(nextState)
@@ -554,4 +573,276 @@ export function getRatingResults(state) {
       canDebut: calcTraineeScore(t) >= CFG.rating.debutScoreThreshold,
     }))
     .sort((a, b) => b.score - a.score)
+}
+
+export function publishMaterial(state, materialType, targetTraineeId = null) {
+  const material = CFG.community.materials[materialType]
+  if (!material) return { success: false, message: '物料类型不存在' }
+
+  const lastDay = state.community.lastMaterialDay[materialType] || 0
+  if (state.day - lastDay < material.cooldownDays) {
+    return {
+      success: false,
+      message: `距上次发布还需 ${material.cooldownDays - (state.day - lastDay)} 天`,
+    }
+  }
+
+  if (state.money < material.cost) {
+    return { success: false, message: '资金不足' }
+  }
+
+  const activityGain = randInt(material.activityGain[0], material.activityGain[1])
+  const satisfactionGain = randInt(material.satisfactionGain[0], material.satisfactionGain[1])
+  const fansGain = randInt(material.fansGain[0], material.fansGain[1])
+
+  const trainees = state.trainees.map((t) => ({ ...t, stats: { ...t.stats } }))
+  if (targetTraineeId) {
+    const target = trainees.find((t) => t.id === targetTraineeId)
+    if (target) {
+      target.fans += Math.round(fansGain * 0.4)
+    }
+  }
+
+  const newMaterial = {
+    id: `m_${Date.now()}`,
+    type: materialType,
+    day: state.day,
+    activityGain,
+    satisfactionGain,
+    fansGain,
+    targetTraineeId,
+  }
+
+  const community = {
+    ...state.community,
+    activity: clamp(state.community.activity + activityGain, 0, CFG.community.maxActivity),
+    satisfaction: clamp(state.community.satisfaction + satisfactionGain, 0, CFG.community.maxSatisfaction),
+    materials: [...state.community.materials, newMaterial],
+    lastMaterialDay: { ...state.community.lastMaterialDay, [materialType]: state.day },
+  }
+
+  const logs = [
+    ...state.logs,
+    {
+      day: state.day,
+      text: `📢 发布「${material.label}」，活跃度 +${activityGain}，满意度 +${satisfactionGain}，粉丝 +${fansGain}！`,
+    },
+  ]
+
+  return {
+    success: true,
+    state: {
+      ...state,
+      money: state.money - material.cost,
+      totalExpenses: state.totalExpenses + material.cost,
+      fans: state.fans + fansGain,
+      trainees,
+      community,
+      logs,
+    },
+  }
+}
+
+export function generateCommunityTopic(state) {
+  if (state.community.topics.length >= CFG.community.topics.maxActiveTopics) {
+    return null
+  }
+
+  if (Math.random() > CFG.community.topics.dailyChance) {
+    return null
+  }
+
+  const types = Object.entries(CFG.community.topics.types).map(([key, val]) => ({
+    key,
+    ...val,
+  }))
+  const picked = weightedPick(types)
+
+  const topic = {
+    id: `t_${Date.now()}_${randInt(1000, 9999)}`,
+    type: picked.key,
+    label: picked.label,
+    icon: picked.icon,
+    description: picked.description,
+    createdDay: state.day,
+    expiresDay: state.day + CFG.community.topics.responseWindow,
+    options: picked.options,
+    requireTrainee: picked.requireTrainee || false,
+    targetTraineeId: null,
+  }
+
+  if (picked.requireTrainee) {
+    const active = getActiveTrainees(state).filter((t) => t.status !== 'left')
+    if (active.length > 0) {
+      topic.targetTraineeId = pickRandom(active).id
+    }
+  }
+
+  return topic
+}
+
+export function respondToTopic(state, topicId, optionIndex) {
+  const topic = state.community.topics.find((t) => t.id === topicId)
+  if (!topic) return { success: false, message: '话题不存在' }
+
+  if (state.day > topic.expiresDay) {
+    return { success: false, message: '话题已过期' }
+  }
+
+  const option = topic.options[optionIndex]
+  if (!option) return { success: false, message: '选项不存在' }
+
+  const cost = option.cost || 0
+  if (state.money < cost) {
+    return { success: false, message: '资金不足' }
+  }
+
+  const activityBonus = randInt(option.activityBonus[0], option.activityBonus[1])
+  const satisfactionBonus = randInt(option.satisfactionBonus[0], option.satisfactionBonus[1])
+
+  const community = {
+    ...state.community,
+    activity: clamp(state.community.activity + activityBonus, 0, CFG.community.maxActivity),
+    satisfaction: clamp(state.community.satisfaction + satisfactionBonus, 0, CFG.community.maxSatisfaction),
+    topics: state.community.topics.filter((t) => t.id !== topicId),
+    revenueBonusMultiplier: state.community.revenueBonusMultiplier + option.revenueBonus,
+    pendingTopic: null,
+  }
+
+  const logs = [
+    ...state.logs,
+    {
+      day: state.day,
+      text: `💬 回应「${topic.label}」：选择「${option.text}」，活跃度 +${activityBonus}，满意度 +${satisfactionBonus}，收入加成 +${Math.round(option.revenueBonus * 100)}%！`,
+    },
+  ]
+
+  let targetTraineeName = ''
+  const trainees = state.trainees.map((t) => ({ ...t, stats: { ...t.stats } }))
+  if (topic.targetTraineeId) {
+    const target = trainees.find((t) => t.id === topic.targetTraineeId)
+    if (target) {
+      target.fans += Math.round(activityBonus * 2)
+      targetTraineeName = target.name
+    }
+  }
+
+  return {
+    success: true,
+    state: {
+      ...state,
+      money: state.money - cost,
+      totalExpenses: state.totalExpenses + cost,
+      trainees,
+      community,
+      logs,
+    },
+  }
+}
+
+export function triggerConversion(state, conversionType) {
+  const conversion = CFG.community.conversions[conversionType]
+  if (!conversion) return { success: false, message: '转化类型不存在' }
+
+  if (conversion.requireDebut && state.groups.length === 0) {
+    return { success: false, message: '需要先有出道组合' }
+  }
+
+  const lastDay = state.community.lastConversionDay[conversionType] || 0
+  if (state.day - lastDay < conversion.cooldownDays) {
+    return {
+      success: false,
+      message: `距上次转化还需 ${conversion.cooldownDays - (state.day - lastDay)} 天`,
+    }
+  }
+
+  const activity = state.community.activity
+  const satisfaction = state.community.satisfaction
+  const fans = state.fans
+
+  const baseRevenue = conversion.baseRevenue
+  const activityComponent = activity * conversion.activityMultiplier * 10
+  const satisfactionComponent = satisfaction * conversion.satisfactionMultiplier * 10
+  const fansComponent = fans * 0.5
+
+  const revenue = Math.round(
+    (baseRevenue + activityComponent + satisfactionComponent + fansComponent) *
+      state.community.revenueBonusMultiplier *
+      (0.85 + randFloat(0, 0.3))
+  )
+
+  const newConversion = {
+    id: `c_${Date.now()}`,
+    type: conversionType,
+    day: state.day,
+    revenue,
+    activityAtTime: activity,
+    satisfactionAtTime: satisfaction,
+  }
+
+  const community = {
+    ...state.community,
+    conversions: [...state.community.conversions, newConversion],
+    lastConversionDay: { ...state.community.lastConversionDay, [conversionType]: state.day },
+    totalConversionRevenue: state.community.totalConversionRevenue + revenue,
+  }
+
+  const logs = [
+    ...state.logs,
+    {
+      day: state.day,
+      text: `💰 「${conversion.label}」转化成功！收入 ¥${revenue.toLocaleString()}（活跃度 ${activity}，满意度 ${satisfaction}）`,
+    },
+  ]
+
+  return {
+    success: true,
+    state: {
+      ...state,
+      money: state.money + revenue,
+      totalRevenue: state.totalRevenue + revenue,
+      community,
+      logs,
+    },
+    revenue,
+  }
+}
+
+function processCommunityDaily(state, logs) {
+  const community = { ...state.community }
+
+  const decay = randInt(CFG.community.dailyDecay[0], CFG.community.dailyDecay[1])
+  community.activity = clamp(community.activity - decay, 0, CFG.community.maxActivity)
+
+  if (community.activity < 20) {
+    const satDecay = randInt(1, 3)
+    community.satisfaction = clamp(community.satisfaction - satDecay, 0, CFG.community.maxSatisfaction)
+  }
+
+  community.topics = community.topics.filter((t) => {
+    if (state.day > t.expiresDay) {
+      logs.push({
+        day: state.day,
+        text: `⚠️ 「${t.label}」话题未及时回应，粉丝满意度下降！`,
+      })
+      community.satisfaction = clamp(community.satisfaction - 5, 0, CFG.community.maxSatisfaction)
+      return false
+    }
+    return true
+  })
+
+  if (community.revenueBonusMultiplier > 1) {
+    community.revenueBonusMultiplier = Math.max(1, community.revenueBonusMultiplier - 0.02)
+  }
+
+  const newTopic = generateCommunityTopic({ ...state, community })
+  if (newTopic) {
+    community.topics = [...community.topics, newTopic]
+    logs.push({
+      day: state.day,
+      text: `💬 新话题「${newTopic.label}」出现，快去回应吧！`,
+    })
+  }
+
+  return community
 }

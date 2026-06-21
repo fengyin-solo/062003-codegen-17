@@ -22,7 +22,22 @@
       </aside>
 
       <main class="main-panel">
+        <div class="tabs community-tabs">
+          <button
+            v-for="tab in mainTabs"
+            :key="tab.key"
+            :class="{ active: activeMainTab === tab.key }"
+            @click="activeMainTab = tab.key"
+          >
+            {{ tab.label }}
+            <span v-if="tab.key === 'community' && state.community.topics.length > 0" class="tab-badge">
+              {{ state.community.topics.length }}
+            </span>
+          </button>
+        </div>
+
         <SchedulePanel
+          v-if="activeMainTab === 'schedule'"
           :trainees="activeTrainees"
           :schedule="state.schedule"
           :can-end="canEndDay"
@@ -30,6 +45,16 @@
           @clear="$emit('clear-schedule')"
           @end-day="$emit('end-day')"
         />
+
+        <CommunityPanel
+          v-if="activeMainTab === 'community'"
+          :community="state.community"
+          :current-day="state.day"
+          :money="state.money"
+          @publish="onPublishMaterial"
+          @show-topic="showTopicModal"
+        />
+
         <DayLog :logs="state.logs" />
       </main>
 
@@ -39,6 +64,12 @@
           :trainees="state.trainees"
           :money="state.money"
           @release="(id) => $emit('release-single', id)"
+        />
+        <ConversionStats
+          :community="state.community"
+          :current-day="state.day"
+          :has-debut="state.groups.length > 0"
+          @trigger="onTriggerConversion"
         />
         <RelationshipPanel
           :trainees="state.trainees"
@@ -67,6 +98,16 @@
       @resolve="(keep) => $emit('resolve-poaching', keep)"
     />
 
+    <TopicResponseModal
+      v-if="activeTopic"
+      :topic="activeTopic"
+      :current-day="state.day"
+      :money="state.money"
+      :trainees="state.trainees"
+      @close="activeTopic = null"
+      @respond="onRespondTopic"
+    />
+
     <GameOverModal
       v-if="state.gameStatus !== 'playing'"
       :status="state.gameStatus"
@@ -91,6 +132,9 @@ import RatingModal from './RatingModal.vue'
 import DebutModal from './DebutModal.vue'
 import EventModal from './EventModal.vue'
 import GameOverModal from './GameOverModal.vue'
+import CommunityPanel from './CommunityPanel.vue'
+import TopicResponseModal from './TopicResponseModal.vue'
+import ConversionStats from './ConversionStats.vue'
 
 const props = defineProps({
   state: Object,
@@ -113,9 +157,19 @@ const emit = defineEmits([
   'debut',
   'resolve-poaching',
   'release-single',
+  'publish-material',
+  'respond-topic',
+  'trigger-conversion',
 ])
 
+const mainTabs = [
+  { key: 'schedule', label: '📅 日程安排' },
+  { key: 'community', label: '💬 粉丝社群' },
+]
+
+const activeMainTab = ref('schedule')
 const showDebut = ref(false)
+const activeTopic = ref(null)
 const toast = ref('')
 
 function onDebut(memberIds, groupName) {
@@ -124,6 +178,47 @@ function onDebut(memberIds, groupName) {
       showDebut.value = false
       toast.value = '出道成功！'
       setTimeout(() => { toast.value = '' }, 2500)
+    } else if (result?.message) {
+      toast.value = result.message
+      setTimeout(() => { toast.value = '' }, 3000)
+    }
+  })
+}
+
+function showTopicModal(topic) {
+  activeTopic.value = topic
+}
+
+function onPublishMaterial(type) {
+  emit('publish-material', type, (result) => {
+    if (result?.success) {
+      toast.value = '物料发布成功！'
+      setTimeout(() => { toast.value = '' }, 2000)
+    } else if (result?.message) {
+      toast.value = result.message
+      setTimeout(() => { toast.value = '' }, 3000)
+    }
+  })
+}
+
+function onRespondTopic(topicId, optionIndex) {
+  emit('respond-topic', topicId, optionIndex, (result) => {
+    if (result?.success) {
+      activeTopic.value = null
+      toast.value = '话题回应成功！'
+      setTimeout(() => { toast.value = '' }, 2000)
+    } else if (result?.message) {
+      toast.value = result.message
+      setTimeout(() => { toast.value = '' }, 3000)
+    }
+  })
+}
+
+function onTriggerConversion(type) {
+  emit('trigger-conversion', type, (result) => {
+    if (result?.success) {
+      toast.value = `转化成功！收入 ¥${result.revenue.toLocaleString()}`
+      setTimeout(() => { toast.value = '' }, 3000)
     } else if (result?.message) {
       toast.value = result.message
       setTimeout(() => { toast.value = '' }, 3000)
@@ -164,6 +259,44 @@ function onDebut(memberIds, groupName) {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.community-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+.community-tabs button {
+  flex: 1;
+  padding: 0.6rem;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.community-tabs button.active {
+  background: var(--accent);
+  color: white;
+}
+
+.tab-badge {
+  background: #ff6b6b;
+  color: white;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
 }
 
 .toast {
