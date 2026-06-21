@@ -63,6 +63,9 @@ const {
   backToMenu,
   getRatingResults,
   calcTraineeScore,
+  handlePublishMaterial,
+  handleRespondToTopic,
+  handleTriggerConversion,
 } = useGame()
 
 onMounted(() => {

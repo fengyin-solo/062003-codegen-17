@@ -43,6 +43,25 @@ function createInitialCommunityState() {
   }
 }
 
+export function ensureCommunityState(state) {
+  if (!state.community) {
+    return {
+      ...state,
+      community: createInitialCommunityState(),
+    }
+  }
+  const defaultCommunity = createInitialCommunityState()
+  const community = { ...defaultCommunity, ...state.community }
+  if (!community.materials) community.materials = []
+  if (!community.topics) community.topics = []
+  if (!community.conversions) community.conversions = []
+  if (!community.lastMaterialDay) community.lastMaterialDay = {}
+  if (!community.lastConversionDay) community.lastConversionDay = {}
+  if (!community.totalConversionRevenue) community.totalConversionRevenue = 0
+  if (!community.revenueBonusMultiplier) community.revenueBonusMultiplier = 1
+  return { ...state, community }
+}
+
 function createTrainee(name, index) {
   const stats = {}
   for (const key of CFG.stats) {
@@ -153,13 +172,14 @@ function getTrainingMultiplier(trainee, partners, relationships) {
 }
 
 export function processDay(state) {
+  const safeState = ensureCommunityState(state)
   const logs = []
-  let money = state.money
-  let fans = state.fans
-  let totalExpenses = state.totalExpenses
-  const relationships = { ...state.relationships }
-  const trainees = state.trainees.map((t) => ({ ...t, stats: { ...t.stats } }))
-  const schedule = state.schedule
+  let money = safeState.money
+  let fans = safeState.fans
+  let totalExpenses = safeState.totalExpenses
+  const relationships = { ...safeState.relationships }
+  const trainees = safeState.trainees.map((t) => ({ ...t, stats: { ...t.stats } }))
+  const schedule = safeState.schedule
 
   const activityGroups = {}
   for (const [traineeId, activity] of Object.entries(schedule)) {
@@ -281,7 +301,7 @@ export function processDay(state) {
   money -= dailyCost
   totalExpenses += dailyCost
 
-  const community = processCommunityDaily(state, logs)
+  const community = processCommunityDaily(safeState, logs)
 
   const newDay = state.day + 1
   const pendingRating = state.day % CFG.rating.interval === 0

@@ -13,6 +13,7 @@ import {
   publishMaterial,
   respondToTopic,
   triggerConversion,
+  ensureCommunityState,
 } from '../utils/gameLogic'
 import { saveToSlot } from '../utils/storage'
 
@@ -37,7 +38,8 @@ export function useGame() {
   }
 
   function loadGame(slotIndex, saved) {
-    state.value = JSON.parse(JSON.stringify(saved.gameState))
+    const loadedState = JSON.parse(JSON.stringify(saved.gameState))
+    state.value = ensureCommunityState(loadedState)
     currentSlot.value = slotIndex
     screen.value = 'game'
   }

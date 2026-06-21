@@ -4,43 +4,44 @@
       <div class="modal-header">
         <span class="topic-icon">{{ topic.icon }}</span>
         <div class="header-info">
-        <h3>{{ topic.label }}</h3>
-        <p class="topic-desc">{{ topic.description }}</p>
-      </div>
-      <button class="close-btn" @click="$emit('close')">×</button>
-    </div>
-
-    <div class="target-info" v-if="topic.targetTraineeId && targetTrainee">
-      <span>👤 关联成员: {{ targetTrainee.name }}</span>
-    </div>
-
-    <div class="expires-info">
-      ⏰ 剩余回应期限: {{ topic.expiresDay - currentDay }} 天
-    </div>
-
-    <div class="options-list">
-      <div
-        v-for="(option, index) in topic.options"
-        :key="index"
-        class="option-card"
-        :class="{ disabled: !canAfford(option) }"
-      >
-        <div class="option-content">
-          <span class="option-text">{{ option.text }}</span>
-          <div class="option-bonuses">
-            <span class="bonus">活跃度 +{{ option.activityBonus[0] }}-{{ option.activityBonus[1] }}</span>
-            <span class="bonus">满意度 +{{ option.satisfactionBonus[0] }}-{{ option.satisfactionBonus[1] }}</span>
-            <span class="bonus revenue">收入加成 +{{ Math.round(option.revenueBonus * 100) }}%</span>
-          </div>
+          <h3>{{ topic.label }}</h3>
+          <p class="topic-desc">{{ topic.description }}</p>
         </div>
-        <div class="option-action">
-          <span v-if="option.cost" class="option-cost">¥{{ option.cost }}</span>
-          <button
-            @click="onRespond(index)"
-            :disabled="!canAfford(option)"
-          >
-            选择
-          </button>
+        <button class="close-btn" @click="$emit('close')">×</button>
+      </div>
+
+      <div class="target-info" v-if="topic.targetTraineeId && targetTrainee">
+        <span>👤 关联成员: {{ targetTrainee.name }}</span>
+      </div>
+
+      <div class="expires-info">
+        ⏰ 剩余回应期限: {{ topic.expiresDay - currentDay }} 天
+      </div>
+
+      <div class="options-list">
+        <div
+          v-for="(option, index) in topic.options"
+          :key="index"
+          class="option-card"
+          :class="{ disabled: !canAfford(option) }"
+        >
+          <div class="option-content">
+            <span class="option-text">{{ option.text }}</span>
+            <div class="option-bonuses">
+              <span class="bonus">活跃度 +{{ option.activityBonus[0] }}-{{ option.activityBonus[1] }}</span>
+              <span class="bonus">满意度 +{{ option.satisfactionBonus[0] }}-{{ option.satisfactionBonus[1] }}</span>
+              <span class="bonus revenue">收入加成 +{{ Math.round(option.revenueBonus * 100) }}%</span>
+            </div>
+          </div>
+          <div class="option-action">
+            <span v-if="option.cost" class="option-cost">¥{{ option.cost }}</span>
+            <button
+              @click="onRespond(index)"
+              :disabled="!canAfford(option)"
+            >
+              选择
+            </button>
+          </div>
         </div>
       </div>
     </div>
